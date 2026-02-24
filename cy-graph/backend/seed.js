@@ -100,7 +100,41 @@ async function seedDatabase() {
     console.log(`   Edges:          ${insertedEdges.length}`);
     console.log(`   Firewall Rules: ${insertedRules.length}`);
 
+    // ── Seed Vulnerabilities ──────────────────────────
+    const Vulnerability = require('./models/Vulnerability');
+    await Vulnerability.deleteMany({});
+
+    const vulnNodes = [
+      'WEB-SERVER-01', 'WORKST-AHMED', 'IOT-CAMERA-01',
+      'DB-SERVER-01',  'IOT-PRINTER',  'WORKST-ALI',
+      'IOT-HVAC',
+    ];
+
+    const vulnData = [
+      { cveId:'CVE-2024-1337', node:'WEB-SERVER-01', desc:'Apache Log4j RCE',    score:9.8, sev:'critical', status:'active'     },
+      { cveId:'CVE-2024-2187', node:'WORKST-AHMED',  desc:'SMB Null Session',    score:8.1, sev:'high',     status:'active'     },
+      { cveId:'CVE-2024-3321', node:'IOT-CAMERA-01', desc:'Default Credentials', score:7.5, sev:'high',     status:'active'     },
+      { cveId:'CVE-2023-4422', node:'DB-SERVER-01',  desc:'SQLi via REST API',   score:6.3, sev:'medium',   status:'patching'   },
+      { cveId:'CVE-2023-5512', node:'IOT-PRINTER',   desc:'Telnet Exposed',      score:5.9, sev:'medium',   status:'active'     },
+      { cveId:'CVE-2023-6617', node:'WORKST-ALI',    desc:'RDP Brute Force',     score:7.8, sev:'high',     status:'monitoring' },
+      { cveId:'CVE-2022-9911', node:'IOT-HVAC',      desc:'Unencrypted MQTT',    score:4.2, sev:'low',      status:'active'     },
+    ];
+
+    const vulnsToInsert = vulnData.map(v => ({
+      cveId:        v.cveId,
+      affectedNode: nodeMap[v.node],
+      description:  v.desc,
+      cvssScore:    v.score,
+      severity:     v.sev,
+      status:       v.status,
+    }));
+
+    await Vulnerability.insertMany(vulnsToInsert);
+    console.log(`✅ Inserted ${vulnsToInsert.length} vulnerabilities`);
+
     process.exit(0);
+
+
   } catch (err) {
     console.error('❌ Seeding failed:', err.message);
     process.exit(1);
