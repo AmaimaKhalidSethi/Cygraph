@@ -1,10 +1,24 @@
-const express = require('express');
-const mongoose = require('mongoose');
-const cors = require('cors');
-const morgan = require('morgan');
+const express    = require('express');
+const mongoose   = require('mongoose');
+const cors       = require('cors');
+const morgan     = require('morgan');
+const http       = require('http');
+const { Server } = require('socket.io');
 require('dotenv').config();
 
-const app = express();
+const app    = express();
+const server = http.createServer(app);
+
+// ── Socket.io setup ─────────────────────────────────────
+const io = new Server(server, {
+  cors: {
+    origin: '*',
+    methods: ['GET', 'POST'],
+  },
+});
+
+// ── Make io accessible in routes if needed ──────────────
+app.set('io', io);
 
 // ── Middleware ──────────────────────────────────────────
 app.use(cors({ origin: '*' }));
@@ -20,10 +34,11 @@ app.use('/api/firewall', require('./routes/firewall'));
 // ── Health Check ────────────────────────────────────────
 app.get('/api/health', (req, res) => {
   res.json({
-    status: 'ok',
+    status:  'ok',
     message: 'CY-GRAPH backend is running',
-    time: new Date().toISOString(),
-    routes: ['/api/nodes', '/api/edges', '/api/attack', '/api/firewall'],
+    time:    new Date().toISOString(),
+    sockets: io.engine.clientsCount,
+    routes:  ['/api/nodes', '/api/edges', '/api/attack', '/api/firewall'],
   });
 });
 
@@ -32,14 +47,18 @@ app.use((req, res) => {
   res.status(404).json({ success: false, error: `Route ${req.originalUrl} not found` });
 });
 
+// ── Socket Handler ──────────────────────────────────────
+require('./socket/attackHandler')(io);
+
 // ── MongoDB + Server Start ───────────────────────────────
 mongoose
   .connect(process.env.MONGO_URI)
   .then(() => {
     console.log('✅ MongoDB Atlas connected');
-    app.listen(process.env.PORT, '0.0.0.0', () => {
+    server.listen(process.env.PORT, '0.0.0.0', () => {
       console.log(`🚀 Server running on port ${process.env.PORT}`);
       console.log(`🌐 Open: http://localhost:${process.env.PORT}/api/health`);
+      console.log(`📡 Socket.io ready for connections`);
     });
   })
   .catch((err) => {

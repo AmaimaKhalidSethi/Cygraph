@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>CY-GRAPH Socket Tester</title>
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+</head>
+<body style="background:#0a0a0a;color:#00d4ff;font-family:monospace;padding:20px;">
+
+  <h2>🔌 CY-GRAPH Socket Tester</h2>
+  <div id="status" style="margin-bottom:16px;">Connecting...</div>
+
+  <div style="display:flex;gap:10px;flex-wrap:wrap;">
+    <button onclick="sendPing()"      class="btn">PING</button>
+    <button onclick="loadNodes()"     class="btn">LOAD NODES</button>
+    <button onclick="resetNetwork()"  class="btn danger">RESET NETWORK</button>
+  </div>
+
+  <div id="nodes" style="margin-top:16px;"></div>
+
+  <div id="log" style="margin-top:16px;max-height:400px;
+    overflow-y:auto;border:1px solid #0d2444;padding:12px;"></div>
+
+  <style>
+    .btn {
+      padding: 8px 18px;
+      background: #00d4ff22;
+      color: #00d4ff;
+      border: 1px solid #00d4ff;
+      cursor: pointer;
+      font-family: monospace;
+      font-size: 13px;
+    }
+    .btn.danger {
+      color: #ff2244;
+      border-color: #ff2244;
+      background: #ff224422;
+    }
+    .node-btn {
+      padding: 5px 12px;
+      margin: 3px;
+      background: #ff224422;
+      color: #ff2244;
+      border: 1px solid #ff2244;
+      cursor: pointer;
+      font-family: monospace;
+      font-size: 11px;
+    }
+  </style>
+
+  <script>
+    // ⚠️ Change this to Laptop A's IP when testing from Laptop B / Phone
+    const SERVER = 'http://192.168.0.106:5000';
+    const socket = io(SERVER);
+
+    function addLog(msg, color = '#00d4ff') {
+      const t = new Date().toTimeString().slice(0, 8);
+      const log = document.getElementById('log');
+      log.innerHTML = `<div style="color:${color}">[${t}] ${msg}</div>` + log.innerHTML;
+    }
+
+    socket.on('connect', () => {
+      document.getElementById('status').textContent = '🟢 Connected: ' + socket.id;
+      document.getElementById('status').style.color = '#00ff88';
+      addLog('Connected — ' + socket.id, '#00ff88');
+    });
+
+    socket.on('disconnect', () => {
+      document.getElementById('status').textContent = '🔴 Disconnected';
+      addLog('Disconnected', '#ff2244');
+    });
+
+    socket.on('pong',             (d) => addLog('PONG: ' + JSON.stringify(d), '#ff9500'));
+    socket.on('attack:spread',    (d) => addLog('ATTACK SPREAD: ' + JSON.stringify(d), '#ff2244'));
+    socket.on('attack:wave',      (d) => addLog('WAVE: compromised=' + d.compromised.length + ' blocked=' + d.blocked.length, '#ff2244'));
+    socket.on('attack:complete',  (d) => addLog('ATTACK COMPLETE: ' + d.message, '#ff9500'));
+    socket.on('reset:done',       (d) => addLog('RESET DONE — ' + d.nodes.length + ' nodes reset', '#00ff88'));
+    socket.on('node:added',       (d) => addLog('NODE ADDED: ' + d.node.name, '#aa44ff'));
+    socket.on('node:updated',     (d) => addLog('NODE UPDATED: ' + d.node.name, '#00d4ff'));
+
+    function sendPing() {
+      socket.emit('ping');
+      addLog('PING sent →', '#aa44ff');
+    }
+
+    function resetNetwork() {
+      socket.emit('reset:network');
+      addLog('RESET sent →', '#ff9500');
+    }
+
+    async function loadNodes() {
+      const res   = await fetch(SERVER + '/api/nodes');
+      const json  = await res.json();
+      const wrap  = document.getElementById('nodes');
+      wrap.innerHTML = '<div style="color:#888;margin-bottom:8px;">Click a node to ATTACK it:</div>';
+      json.data.forEach(n => {
+        const color = n.hasFirewall ? '#00ff88' : '#ff2244';
+        wrap.innerHTML +=
+          `<button class="node-btn" style="color:${color};border-color:${color}"
+            onclick="attackNode('${n._id}','${n.name}')">
+            ${n.name} ${n.hasFirewall ? '🛡' : '⚠️'}
+          </button>`;
+      });
+      addLog('Loaded ' + json.data.length + ' nodes', '#00ff88');
+    }
+
+    function attackNode(id, name) {
+      socket.emit('attack:start', { nodeId: id });
+      addLog('⚡ Attack started on: ' + name, '#ff2244');
+    }
+  </script>
+</body>
+</html>
