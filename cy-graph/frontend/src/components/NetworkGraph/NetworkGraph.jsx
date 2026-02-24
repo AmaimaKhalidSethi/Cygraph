@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import * as d3 from 'd3';
 import api from '../../api/axios';
 
@@ -25,7 +25,7 @@ function getNodeColor(node) {
   return NODE_COLORS[node.type] || '#8ab4d4';
 }
 
-export default function NetworkGraph({ nodes, edges, setNodes, socket }) {
+export default function NetworkGraph({ nodes, edges }) {
   const svgRef        = useRef(null);
   const simulationRef = useRef(null);
 
@@ -204,7 +204,7 @@ export default function NetworkGraph({ nodes, edges, setNodes, socket }) {
     return () => {
       if (simulationRef.current) simulationRef.current.stop();
     };
-  }, [nodes.length, edges.length]);
+  }, [nodes, edges]);
 
   // ── Update colors when node status changes ──────────────
   useEffect(() => {

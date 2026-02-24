@@ -217,38 +217,55 @@ function D3Graph({ nodes, edges, onNodeClick }) {
     const nodeG = svgRef.current?._nodeG;
     if (!nodeG) return;
 
-    nodeG.select('.main-circle')
-      .transition().duration(600)
-      .attr('stroke', d => {
-        const u = nodes.find(n => n._id === d.id);
-        return u ? getColor(u) : getColor(d);
-      })
-      .attr('fill', d => {
-        const u     = nodes.find(n => n._id === d.id);
-        const color = u ? getColor(u) : getColor(d);
-        return color + '22';
-      });
-
-    // Ripple on compromised
+    // Update every node's color
     nodeG.each(function(d) {
-      const u = nodes.find(n => n._id === d.id);
-      if (u?.status === 'compromised') {
-        const ripple = d3.select(this).select('.ripple')
-          .attr('stroke','#ff2244');
-        if (d3.select(this).attr('data-pulsing')) return;
-        d3.select(this).attr('data-pulsing','1');
+      const updated = nodes.find(n => n._id === d.id);
+      if (!updated) return;
+
+      // Sync status to d3 data
+      d.status     = updated.status;
+      d.hasFirewall= updated.hasFirewall;
+
+      const color = getColor(updated);
+
+      d3.select(this).select('.main-circle')
+        .transition().duration(600)
+        .attr('stroke', color)
+        .attr('fill',   color + '22');
+
+      d3.select(this).selectAll('text')
+        .filter(function() {
+          return !d3.select(this).classed('ripple');
+        })
+        .transition().duration(600)
+        .attr('fill', color);
+
+      // Ripple on compromised
+      if (updated.status === 'compromised') {
+        const el = d3.select(this);
+        if (el.attr('data-pulsing')) return;
+        el.attr('data-pulsing', '1');
+
+        const ripple = el.select('.ripple')
+          .attr('stroke', '#ff2244')
+          .attr('stroke-width', 2);
+
         function pulse() {
-          ripple.attr('opacity',0.8)
-            .attr('r', NODE_RADIUS[d.type]||14)
-            .transition().duration(1200)
-            .attr('r',  (NODE_RADIUS[d.type]||14)*3.5)
-            .attr('opacity',0)
+          ripple
+            .attr('r',       NODE_RADIUS[d.type] || 14)
+            .attr('opacity', 0.9)
+            .transition()
+            .duration(1000)
+            .ease(d3.easeCubicOut)
+            .attr('r',       (NODE_RADIUS[d.type] || 14) * 4)
+            .attr('opacity', 0)
             .on('end', pulse);
         }
         pulse();
       }
     });
   }, [nodes]);
+  
 
   // ── D3Graph return — zoom buttons YAHAN hain ─────────
   return (
@@ -332,30 +349,61 @@ export default function Graph() {
 
   // Socket listeners
   useEffect(() => {
-    on('attack:wave', ({ compromised, blocked }) => {
+    // ── Attack wave ─────────────────────────────────
+    function onWave({ compromised, blocked }) {
       setNodes(prev => prev.map(n =>
         compromised.includes(n._id) ? { ...n, status:'compromised' } : n
       ));
       if (compromised.length) addLog('danger', `${compromised.length} node(s) compromised`);
       if (blocked.length)     addLog('warn',   `${blocked.length} node(s) blocked by firewall`);
-    });
-    on('attack:complete', ({ message }) => addLog('warn', message));
-    on('reset:done', ({ nodes: fresh }) => {
-      setNodes(fresh);
+    }
+
+    // ── Attack complete ──────────────────────────────
+    function onComplete({ message }) {
+      addLog('warn', message);
+    }
+
+    // ── Reset done ───────────────────────────────────
+    function onReset({ nodes: fresh }) {
+      console.log('🔄 Reset received — fresh nodes:', fresh.length);
+      setNodes([...fresh]);           // force new array reference
       setSelectedNode(null);
       addLog('safe', 'Network reset — all systems nominal');
-    });
-    on('node:added',   ({ node }) => {
+    }
+
+    // ── Node added ───────────────────────────────────
+    function onNodeAdded({ node }) {
       setNodes(prev => [...prev, node]);
       addLog('safe', `Node added: ${node.name}`);
-    });
-    on('node:updated', ({ node }) => {
+    }
+
+    // ── Node updated ─────────────────────────────────
+    function onNodeUpdated({ node }) {
       setNodes(prev => prev.map(n => n._id === node._id ? node : n));
-    });
+    }
+
+    // ── Attack spread (initial broadcast) ────────────
+    function onSpread({ compromised }) {
+      if (!compromised?.length) return;
+      setNodes(prev => prev.map(n =>
+        compromised.includes(n._id) ? { ...n, status:'compromised' } : n
+      ));
+    }
+
+    on('attack:wave',     onWave);
+    on('attack:complete', onComplete);
+    on('reset:done',      onReset);
+    on('node:added',      onNodeAdded);
+    on('node:updated',    onNodeUpdated);
+    on('attack:spread',   onSpread);
 
     return () => {
-      ['attack:wave','attack:complete','reset:done',
-       'node:added','node:updated'].forEach(e => off(e));
+      off('attack:wave',     onWave);
+      off('attack:complete', onComplete);
+      off('reset:done',      onReset);
+      off('node:added',      onNodeAdded);
+      off('node:updated',    onNodeUpdated);
+      off('attack:spread',   onSpread);
     };
   }, [on, off]);
 
@@ -388,6 +436,19 @@ export default function Graph() {
       status:     'warning',
       position:   { x:400+Math.random()*200, y:300+Math.random()*200 },
     });
+  }
+
+  // delete node
+  async function deleteNode() {
+    if (!selectedNode) { addLog('warn', 'Select a node first!'); return; }
+    try {
+      await api.delete(`/api/nodes/${selectedNode._id}`);
+      setNodes(prev => prev.filter(n => n._id !== selectedNode._id));
+      setSelectedNode(null);
+      addLog('safe', `Node ${selectedNode.name} deleted`);
+    } catch (err) {
+      addLog('danger', 'Delete failed: ' + err.message);
+    }
   }
 
   if (loading) return (
@@ -474,6 +535,7 @@ export default function Graph() {
         flexDirection:'column', overflow:'hidden', flexShrink:0,
       }}>
         {/* Node details */}
+        {/* Node details */}
         <div style={{ padding:14, borderBottom:'1px solid #0d2444' }}>
           <div style={titleSt}>NODE DETAILS</div>
           {selectedNode ? (
@@ -510,6 +572,29 @@ export default function Graph() {
                   }}>{val}</span>
                 </div>
               ))}
+
+              {/* Delete button — only admin */}
+              {isAdmin && (
+                <button
+                  onClick={deleteNode}
+                  style={{
+                    marginTop: 10,
+                    width: '100%',
+                    padding: '5px',
+                    fontFamily: 'Rajdhani',
+                    fontWeight: 700,
+                    fontSize: 10,
+                    letterSpacing: 2,
+                    border: '1px solid #ff2244',
+                    background: '#ff224411',
+                    color: '#ff2244',
+                    cursor: 'pointer',
+                    textTransform: 'uppercase',
+                  }}
+                >
+                  🗑 DELETE NODE
+                </button>
+              )}
             </>
           ) : (
             <div style={{ fontSize:11, color:'#4a5568' }}>

@@ -99,21 +99,20 @@ async function runBFS(io, startNodeId) {
 // ── Reset Network Function ────────────────────────────
 async function resetNetwork(io) {
   try {
-    await Node.updateMany({},              { $set: { status: 'secure'  } });
-    await Node.updateMany({ hasFirewall: false }, { $set: { status: 'warning' } });
+    await Node.updateMany({},                  { $set: { status: 'secure'  } });
+    await Node.updateMany({ hasFirewall: false },{ $set: { status: 'warning' } });
 
-    const nodes = await Node.find();
+    const nodes = await Node.find().lean(); // lean() — plain JS objects
 
-    await AttackLog.create({
-      attackerId: nodes[0]._id,
-      eventType:  'reset',
-      message:    'Network reset — all systems nominal',
+    io.emit('reset:done', {
+      nodes,
+      message: 'Network reset complete',
     });
 
-    io.emit('reset:done', { nodes, message: 'Network reset complete' });
-    console.log('🔄 Network reset broadcast to all devices');
+    console.log('🔄 Network reset — broadcast to all clients');
   } catch (err) {
     console.error('Reset Error:', err.message);
+    io.emit('attack:error', { message: 'Reset failed: ' + err.message });
   }
 }
 
