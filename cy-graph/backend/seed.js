@@ -1,3 +1,6 @@
+const User = require('./models/User');
+const bcrypt = require('bcrypt');
+
 const mongoose = require('mongoose');
 require('dotenv').config();
 
@@ -131,6 +134,21 @@ async function seedDatabase() {
 
     await Vulnerability.insertMany(vulnsToInsert);
     console.log(`✅ Inserted ${vulnsToInsert.length} vulnerabilities`);
+
+    // ── Seed Users ────────────────────────────────────
+    await User.deleteMany({});
+
+    const adminHash  = await bcrypt.hash('admin123',  12);
+    const viewerHash = await bcrypt.hash('viewer123', 12);
+
+    await User.insertMany([
+      { username: 'admin',  passwordHash: adminHash,  role: 'admin'  },
+      { username: 'viewer', passwordHash: viewerHash, role: 'viewer' },
+    ]);
+
+    console.log('✅ Users seeded:');
+    console.log('   admin  / admin123  (role: admin)');
+    console.log('   viewer / viewer123 (role: viewer)');
 
     process.exit(0);
 

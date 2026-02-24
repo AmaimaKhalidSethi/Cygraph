@@ -32,6 +32,9 @@ app.use('/api/attack',   require('./routes/attack'));
 app.use('/api/firewall', require('./routes/firewall'));
 app.use('/api/vulnerabilities', require('./routes/vulnerabilities'));
 app.use('/api/scan', require('./routes/scan'));
+app.use('/api/auth',            require('./routes/auth'));
+app.use('/api/vulnerabilities', require('./routes/vulnerabilities'));
+
 
 // ── Health Check ────────────────────────────────────────
 app.get('/api/health', (req, res) => {

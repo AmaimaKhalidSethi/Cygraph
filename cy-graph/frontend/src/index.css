@@ -33,3 +33,90 @@ body {
   0%, 100% { opacity: 1; }
   50%       { opacity: 0; }
 }
+
+/* ── Mobile responsive ────────────────────────── */
+@media (max-width: 768px) {
+  body { overflow-y: auto; }
+
+  .graph-layout {
+    flex-direction: column !important;
+  }
+
+  .graph-panel {
+    width: 100% !important;
+    height: 280px;
+    border-left: none !important;
+    border-top: 1px solid #0d2444;
+  }
+
+  .graph-canvas {
+    height: 55vh !important;
+  }
+
+  .metric-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+
+  .threat-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .firewall-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  nav { display: none !important; }
+
+  .mobile-menu {
+    display: flex !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .metric-grid {
+    grid-template-columns: 1fr 1fr !important;
+  }
+
+  header {
+    padding: 0 12px !important;
+  }
+}
+
+/* ── Page transitions ─────────────────────────── */
+.page-enter {
+  animation: fadeIn 0.25s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0);   }
+}
+
+/* ── Responsive Header ────────────────────────── */
+@media (max-width: 768px) {
+  .desktop-nav {
+    display: none !important;
+  }
+
+  .hamburger {
+    display: block !important;
+  }
+
+  .user-badge {
+    display: none !important;
+  }
+
+  .logout-btn {
+    display: none !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .desktop-nav {
+    display: none !important;
+  }
+
+  .hamburger {
+    display: block !important;
+  }
+}

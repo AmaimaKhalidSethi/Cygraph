@@ -1,51 +1,49 @@
+const jwt       = require('jsonwebtoken');
 const Node      = require('../models/Node');
 const Edge      = require('../models/Edge');
 const AttackLog = require('../models/AttackLog');
 
-// ── BFS Attack Propagation ──────────────────────────────
+// ── BFS Attack Function ───────────────────────────────
 async function runBFS(io, startNodeId) {
   try {
-    // Load full graph from MongoDB
     const allNodes = await Node.find();
     const allEdges = await Edge.find();
 
-    // Build adjacency map: nodeId → [connectedNodeIds]
+    // Build adjacency map
     const adjacency = {};
-    allNodes.forEach((n) => {
-      adjacency[n._id.toString()] = [];
-    });
-
-    allEdges.forEach((e) => {
+    allNodes.forEach(n => { adjacency[n._id.toString()] = []; });
+    allEdges.forEach(e => {
       const src = e.source.toString();
       const tgt = e.target.toString();
       if (adjacency[src]) adjacency[src].push(tgt);
       if (adjacency[tgt]) adjacency[tgt].push(src);
     });
 
-    // Mark start node as compromised
+    // Mark start node compromised
     await Node.findByIdAndUpdate(startNodeId, { status: 'compromised' });
+    const startNode = allNodes.find(n => n._id.toString() === startNodeId);
 
     await AttackLog.create({
       attackerId: startNodeId,
       victimId:   startNodeId,
       eventType:  'attack_start',
-      message:    `Attack initiated on ${allNodes.find(n => n._id.toString() === startNodeId)?.name}`,
+      message:    `Attack initiated on ${startNode?.name}`,
     });
 
     io.emit('attack:spread', {
       compromised: [startNodeId],
       blocked:     [],
-      message:     `⚡ Attack started`,
+      message:     `⚡ Attack started on ${startNode?.name}`,
     });
 
-    // BFS
+    // BFS loop
     const visited = new Set([startNodeId]);
-    let   queue   = [startNodeId];
+    let queue     = [startNodeId];
 
     while (queue.length > 0) {
-      const nextQueue    = [];
-      const compromised  = [];
-      const blocked      = [];
+      const nextQueue   = [];
+      const compromised = [];
+      const blocked     = [];
 
       for (const currentId of queue) {
         const neighbors = adjacency[currentId] || [];
@@ -54,55 +52,43 @@ async function runBFS(io, startNodeId) {
           if (visited.has(neighborId)) continue;
           visited.add(neighborId);
 
-          const neighborNode = allNodes.find(
-            (n) => n._id.toString() === neighborId
-          );
-          if (!neighborNode) continue;
+          const neighbor = allNodes.find(n => n._id.toString() === neighborId);
+          if (!neighbor) continue;
 
-          if (neighborNode.hasFirewall) {
-            // Firewall blocks the attack
+          if (neighbor.hasFirewall) {
             blocked.push(neighborId);
-
             await AttackLog.create({
-              attackerId: startNodeId,
+              attackerId:  startNodeId,
               blockedById: neighborId,
-              eventType:  'node_blocked',
-              message:    `🛡 ${neighborNode.name} blocked by firewall`,
+              eventType:   'node_blocked',
+              message:     `🛡 ${neighbor.name} blocked by firewall`,
             });
-
           } else {
-            // Node gets compromised
             await Node.findByIdAndUpdate(neighborId, { status: 'compromised' });
             compromised.push(neighborId);
             nextQueue.push(neighborId);
-
             await AttackLog.create({
               attackerId: startNodeId,
               victimId:   neighborId,
               eventType:  'node_compromised',
-              message:    `✗ ${neighborNode.name} compromised`,
+              message:    `✗ ${neighbor.name} compromised`,
             });
           }
         }
       }
 
-      // Broadcast this wave to ALL devices
       if (compromised.length > 0 || blocked.length > 0) {
         io.emit('attack:wave', { compromised, blocked });
       }
 
-      // Wait 800ms before next wave (visual effect)
       if (nextQueue.length > 0) {
-        await new Promise((resolve) => setTimeout(resolve, 800));
+        await new Promise(resolve => setTimeout(resolve, 800));
       }
 
       queue = nextQueue;
     }
 
-    // Attack complete
-    io.emit('attack:complete', {
-      message: 'Infection wave complete',
-    });
+    io.emit('attack:complete', { message: 'Infection wave complete' });
 
   } catch (err) {
     console.error('BFS Error:', err.message);
@@ -110,10 +96,10 @@ async function runBFS(io, startNodeId) {
   }
 }
 
-// ── Reset Network ───────────────────────────────────────
+// ── Reset Network Function ────────────────────────────
 async function resetNetwork(io) {
   try {
-    await Node.updateMany({}, { $set: { status: 'secure' } });
+    await Node.updateMany({},              { $set: { status: 'secure'  } });
     await Node.updateMany({ hasFirewall: false }, { $set: { status: 'warning' } });
 
     const nodes = await Node.find();
@@ -124,66 +110,93 @@ async function resetNetwork(io) {
       message:    'Network reset — all systems nominal',
     });
 
-    io.emit('reset:done', {
-      nodes,
-      message: 'Network reset complete',
-    });
-
+    io.emit('reset:done', { nodes, message: 'Network reset complete' });
     console.log('🔄 Network reset broadcast to all devices');
   } catch (err) {
     console.error('Reset Error:', err.message);
   }
 }
 
-// ── Main Socket Handler ─────────────────────────────────
+// ── Main Socket Handler ───────────────────────────────
 module.exports = (io) => {
-  io.on('connection', (socket) => {
-    console.log(`🟢 Device connected:    ${socket.id}`);
 
-    // ── Ping test ─────────────────────────────────────
+  // ── JWT Auth Middleware ───────────────────────────
+  io.use((socket, next) => {
+    const token = socket.handshake.auth?.token;
+    if (!token) return next(new Error('No token provided'));
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      socket.user   = decoded;
+      console.log(`🔐 Socket auth: ${decoded.username} (${decoded.role})`);
+      next();
+    } catch (err) {
+      console.error('❌ Socket auth failed:', err.message);
+      return next(new Error('Invalid token'));
+    }
+  });
+
+  io.on('connection', (socket) => {
+    console.log(`🟢 Connected: ${socket.user.username} (${socket.user.role}) — ${socket.id}`);
+
     socket.on('ping', () => {
       socket.emit('pong', {
         message: 'CY-GRAPH socket alive',
+        user:    socket.user.username,
         time:    new Date().toISOString(),
       });
     });
 
-    // ── Attack start ──────────────────────────────────
+    // ── Attack — admin only ─────────────────────────
     socket.on('attack:start', async ({ nodeId }) => {
-      console.log(`⚡ Attack started on node: ${nodeId}`);
+      if (socket.user.role !== 'admin') {
+        socket.emit('auth:error', { message: 'Admin access required' });
+        console.warn(`⛔ Attack blocked — ${socket.user.username} is not admin`);
+        return;
+      }
+      console.log(`⚡ Attack by ${socket.user.username} on: ${nodeId}`);
       await runBFS(io, nodeId);
     });
 
-    // ── Reset network ─────────────────────────────────
+    // ── Reset — admin only ──────────────────────────
     socket.on('reset:network', async () => {
-      console.log('🔄 Reset requested');
+      if (socket.user.role !== 'admin') {
+        socket.emit('auth:error', { message: 'Admin access required' });
+        return;
+      }
+      console.log(`🔄 Reset by ${socket.user.username}`);
       await resetNetwork(io);
     });
 
-    // ── Add node ──────────────────────────────────────
+    // ── Add node — admin only ───────────────────────
     socket.on('node:add', async (nodeData) => {
+      if (socket.user.role !== 'admin') {
+        socket.emit('auth:error', { message: 'Admin access required' });
+        return;
+      }
       try {
         const node = await Node.create(nodeData);
         io.emit('node:added', { node });
-        console.log(`➕ Node added: ${node.name}`);
+        console.log(`➕ Node added by ${socket.user.username}: ${node.name}`);
       } catch (err) {
         socket.emit('node:error', { message: err.message });
       }
     });
 
-    // ── Save node position (drag) ─────────────────────
+    // ── Save position — all users ───────────────────
     socket.on('node:position', async ({ nodeId, x, y }) => {
       try {
-        await Node.findByIdAndUpdate(nodeId, {
-          position: { x, y },
-        });
+        await Node.findByIdAndUpdate(nodeId, { position: { x, y } });
       } catch (err) {
         console.error('Position save error:', err.message);
       }
     });
 
-    // ── Toggle firewall ───────────────────────────────
+    // ── Toggle firewall — admin only ────────────────
     socket.on('node:firewall', async ({ nodeId, hasFirewall }) => {
+      if (socket.user.role !== 'admin') {
+        socket.emit('auth:error', { message: 'Admin access required' });
+        return;
+      }
       try {
         const node = await Node.findByIdAndUpdate(
           nodeId,
@@ -191,14 +204,14 @@ module.exports = (io) => {
           { new: true }
         );
         io.emit('node:updated', { node });
-        console.log(`🛡 Firewall toggled on ${node.name}: ${hasFirewall}`);
+        console.log(`🛡 Firewall toggled by ${socket.user.username} on ${node.name}: ${hasFirewall}`);
       } catch (err) {
         socket.emit('node:error', { message: err.message });
       }
     });
 
     socket.on('disconnect', () => {
-      console.log(`🔴 Device disconnected: ${socket.id}`);
+      console.log(`🔴 Disconnected: ${socket.user.username} — ${socket.id}`);
     });
   });
 };
