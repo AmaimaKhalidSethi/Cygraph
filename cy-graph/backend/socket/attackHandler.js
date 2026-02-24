@@ -19,9 +19,30 @@ async function runBFS(io, startNodeId) {
       if (adjacency[tgt]) adjacency[tgt].push(src);
     });
 
-    // Mark start node compromised
-    await Node.findByIdAndUpdate(startNodeId, { status: 'compromised' });
+    // Check if starting node has firewall
     const startNode = allNodes.find(n => n._id.toString() === startNodeId);
+    if (!startNode) {
+      io.emit('attack:error', { message: 'Starting node not found' });
+      return;
+    }
+
+    if (startNode.hasFirewall) {
+      await AttackLog.create({
+        attackerId: startNodeId,
+        blockedById: startNodeId,
+        eventType: 'node_blocked',
+        message: `🛡 Attack blocked — ${startNode.name} has firewall protection`,
+      });
+      io.emit('attack:spread', {
+        compromised: [],
+        blocked: [startNodeId],
+        message: `🛡 Attack blocked by firewall on ${startNode.name}`,
+      });
+      return;
+    }
+
+    // Mark start node compromised
+    const updatedStartNode = await Node.findByIdAndUpdate(startNodeId, { status: 'compromised' }, { new: true });
 
     await AttackLog.create({
       attackerId: startNodeId,
@@ -35,6 +56,9 @@ async function runBFS(io, startNodeId) {
       blocked:     [],
       message:     `⚡ Attack started on ${startNode?.name}`,
     });
+
+    // Emit node update for starting node
+    io.emit('node:updated', { node: updatedStartNode });
 
     // BFS loop
     const visited = new Set([startNodeId]);
@@ -64,7 +88,7 @@ async function runBFS(io, startNodeId) {
               message:     `🛡 ${neighbor.name} blocked by firewall`,
             });
           } else {
-            await Node.findByIdAndUpdate(neighborId, { status: 'compromised' });
+            const updatedNode = await Node.findByIdAndUpdate(neighborId, { status: 'compromised' }, { new: true });
             compromised.push(neighborId);
             nextQueue.push(neighborId);
             await AttackLog.create({
@@ -73,6 +97,8 @@ async function runBFS(io, startNodeId) {
               eventType:  'node_compromised',
               message:    `✗ ${neighbor.name} compromised`,
             });
+            // Emit node update for real-time UI sync
+            io.emit('node:updated', { node: updatedNode });
           }
         }
       }
@@ -88,6 +114,13 @@ async function runBFS(io, startNodeId) {
       queue = nextQueue;
     }
 
+    // Log attack completion
+    await AttackLog.create({
+      attackerId: startNodeId,
+      eventType: 'attack_complete',
+      message: 'Attack simulation completed - infection wave finished',
+    });
+
     io.emit('attack:complete', { message: 'Infection wave complete' });
 
   } catch (err) {
@@ -101,6 +134,16 @@ async function resetNetwork(io) {
   try {
     await Node.updateMany({},                  { $set: { status: 'secure'  } });
     await Node.updateMany({ hasFirewall: false },{ $set: { status: 'warning' } });
+
+    // Clear all attack logs on reset
+    await AttackLog.deleteMany({});
+
+    // Create a reset log entry (attackerId can be null for system events)
+    await AttackLog.create({
+      attackerId: null,
+      eventType: 'reset',
+      message: 'Network reset - all attack logs cleared',
+    });
 
     const nodes = await Node.find().lean(); // lean() — plain JS objects
 
@@ -152,6 +195,19 @@ module.exports = (io) => {
         console.warn(`⛔ Attack blocked — ${socket.user.username} is not admin`);
         return;
       }
+
+      // Validate node exists
+      try {
+        const targetNode = await Node.findById(nodeId);
+        if (!targetNode) {
+          socket.emit('attack:error', { message: 'Target node not found' });
+          return;
+        }
+      } catch (err) {
+        socket.emit('attack:error', { message: 'Invalid node ID' });
+        return;
+      }
+
       console.log(`⚡ Attack by ${socket.user.username} on: ${nodeId}`);
       await runBFS(io, nodeId);
     });

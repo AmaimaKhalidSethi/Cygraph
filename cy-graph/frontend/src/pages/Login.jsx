@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import InteractiveGrid from '../components/shared/InteractiveGrid';
 
 export default function Login() {
   const [username, setUsername] = useState('');
@@ -34,17 +35,14 @@ export default function Login() {
       height:'100vh', background:'#030810',
       fontFamily:'Share Tech Mono, monospace',
     }}>
-      {/* Background grid */}
-      <div style={{
-        position:'absolute', inset:0,
-        backgroundImage:'linear-gradient(#0d244420 1px, transparent 1px), linear-gradient(90deg, #0d244420 1px, transparent 1px)',
-        backgroundSize:'40px 40px',
-      }} />
+      {/* Interactive Grid Background */}
+      <InteractiveGrid />
 
       <div style={{
         position:'relative', zIndex:1,
         width:400, background:'#060f1e',
         border:'1px solid #0d2444', padding:40,
+        boxShadow:'0 0 50px rgba(0, 212, 255, 0.1)',
       }}>
         {/* Logo */}
         <div style={{ textAlign:'center', marginBottom:32 }}>

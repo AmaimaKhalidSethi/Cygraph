@@ -54,36 +54,6 @@ router.delete('/:id', async (req, res) => {
   try {
     const node = await Node.findByIdAndDelete(req.params.id);
     if (!node) return res.status(404).json({ success: false, error: 'Node not found' });
-    res.json({ success: true, message: `Node ${node.name} deleted` });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-// PUT reset all nodes to default status
-router.put('/action/reset', async (req, res) => {
-  try {
-    await Node.updateMany(
-      {},
-      { $set: { status: 'secure' } }
-    );
-    // re-set warning for nodes without firewall
-    await Node.updateMany(
-      { hasFirewall: false },
-      { $set: { status: 'warning' } }
-    );
-    const nodes = await Node.find();
-    res.json({ success: true, message: 'Network reset', data: nodes });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-// DELETE node + its edges
-router.delete('/:id', async (req, res) => {
-  try {
-    const node = await Node.findByIdAndDelete(req.params.id);
-    if (!node) return res.status(404).json({ success: false, error: 'Node not found' });
 
     // Delete all edges connected to this node
     const edgeResult = await Edge.deleteMany({

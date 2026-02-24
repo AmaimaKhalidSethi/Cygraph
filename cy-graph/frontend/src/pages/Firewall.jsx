@@ -382,60 +382,62 @@ export default function Firewall() {
         )}
 
         {/* Rules table */}
-        <table style={{ width:'100%', borderCollapse:'collapse', fontSize:11 }}>
-          <thead>
-            <tr style={{ background:'#030810' }}>
-              {['#','RULE NAME','SOURCE','DESTINATION','PORT','PROTOCOL','ACTION','ENABLED']
-                .map(h => (
-                <th key={h} style={{
-                  padding:'8px 12px', textAlign:'left',
-                  fontFamily:'Rajdhani', fontWeight:700,
-                  fontSize:10, letterSpacing:2, color:'#00d4ff',
-                  borderBottom:'1px solid #0d2444',
-                }}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {rules.map((rule, i) => (
-              <tr key={rule._id}
-                style={{ background: i%2===0 ? 'transparent' : '#00000022' }}>
-                <td style={{ padding:'8px 12px', color:'#4a5568' }}>{i+1}</td>
-                <td style={{ padding:'8px 12px', color:'#c8e4f8' }}>{rule.name}</td>
-                <td style={{ padding:'8px 12px', color:'#8ab4d4' }}>{rule.source}</td>
-                <td style={{ padding:'8px 12px', color:'#8ab4d4' }}>{rule.destination}</td>
-                <td style={{ padding:'8px 12px', color:'#00d4ff',
-                  fontFamily:'Share Tech Mono' }}>{rule.port}</td>
-                <td style={{ padding:'8px 12px', color:'#8ab4d4' }}>{rule.protocol}</td>
-                <td style={{ padding:'8px 12px' }}>
-                  <span style={{
-                    color:      rule.action==='ALLOW' ? '#52b788' : '#ff2244',
-                    fontWeight: 'bold',
-                  }}>{rule.action}</span>
-                </td>
-                <td style={{ padding:'8px 12px' }}>
-                  <div
-                    onClick={() => toggleRule(rule)}
-                    style={{
-                      width:36, height:18, borderRadius:9, cursor:'pointer',
-                      background:  rule.enabled ? '#52b78822' : '#ff224422',
-                      border:     `1px solid ${rule.enabled ? '#52b788' : '#ff2244'}`,
-                      position:'relative', transition:'all 0.2s',
-                    }}
-                  >
-                    <div style={{
-                      position:'absolute', width:12, height:12,
-                      borderRadius:'50%', top:2,
-                      left: rule.enabled ? 20 : 2,
-                      background: rule.enabled ? '#52b788' : '#ff2244',
-                      transition:'all 0.2s',
-                    }} />
-                  </div>
-                </td>
+        <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
+          <table style={{ width:'100%', borderCollapse:'collapse', fontSize:11 }}>
+            <thead>
+              <tr style={{ background:'#030810' }}>
+                {['#','RULE NAME','SOURCE','DESTINATION','PORT','PROTOCOL','ACTION','ENABLED']
+                  .map(h => (
+                  <th key={h} style={{
+                    padding:'8px 12px', textAlign:'left',
+                    fontFamily:'Rajdhani', fontWeight:700,
+                    fontSize:10, letterSpacing:2, color:'#00d4ff',
+                    borderBottom:'1px solid #0d2444',
+                  }}>{h}</th>
+                ))}
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {rules.map((rule, i) => (
+                <tr key={rule._id}
+                  style={{ background: i%2===0 ? 'transparent' : '#00000022' }}>
+                  <td style={{ padding:'8px 12px', color:'#4a5568' }}>{i+1}</td>
+                  <td style={{ padding:'8px 12px', color:'#c8e4f8' }}>{rule.name}</td>
+                  <td style={{ padding:'8px 12px', color:'#8ab4d4' }}>{rule.source}</td>
+                  <td style={{ padding:'8px 12px', color:'#8ab4d4' }}>{rule.destination}</td>
+                  <td style={{ padding:'8px 12px', color:'#00d4ff',
+                    fontFamily:'Share Tech Mono' }}>{rule.port}</td>
+                  <td style={{ padding:'8px 12px', color:'#8ab4d4' }}>{rule.protocol}</td>
+                  <td style={{ padding:'8px 12px' }}>
+                    <span style={{
+                      color:      rule.action==='ALLOW' ? '#52b788' : '#ff2244',
+                      fontWeight: 'bold',
+                    }}>{rule.action}</span>
+                  </td>
+                  <td style={{ padding:'8px 12px' }}>
+                    <div
+                      onClick={() => toggleRule(rule)}
+                      style={{
+                        width:36, height:18, borderRadius:9, cursor:'pointer',
+                        background:  rule.enabled ? '#52b78822' : '#ff224422',
+                        border:     `1px solid ${rule.enabled ? '#52b788' : '#ff2244'}`,
+                        position:'relative', transition:'all 0.2s',
+                      }}
+                    >
+                      <div style={{
+                        position:'absolute', width:12, height:12,
+                        borderRadius:'50%', top:2,
+                        left: rule.enabled ? 20 : 2,
+                        background: rule.enabled ? '#52b788' : '#ff2244',
+                        transition:'all 0.2s',
+                      }} />
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );

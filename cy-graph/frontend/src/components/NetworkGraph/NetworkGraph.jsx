@@ -98,9 +98,10 @@ export default function NetworkGraph({ nodes, edges }) {
     const link = linkGroup.selectAll('line')
       .data(d3Links)
       .join('line')
-      .attr('stroke',       '#0d2444')
-      .attr('stroke-width', 1.5)
-      .attr('opacity',      0.8);
+      .attr('stroke',       d => d.encrypted ? '#52b788' : '#0d2444')
+      .attr('stroke-width', d => d.encrypted ? 2.5 : 1.5)
+      .attr('opacity',      d => d.encrypted ? 0.9 : 0.6)
+      .attr('stroke-dasharray', d => d.encrypted ? null : '3,3');
 
     // ── Draw nodes group ────────────────────────────────
     const nodeGroup = svg.append('g').attr('class', 'nodes');

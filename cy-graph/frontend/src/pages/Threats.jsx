@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import api from '../api/axios';
 import * as d3 from 'd3';
 import { useRef } from 'react';
+import { useSocket } from '../hooks/useSocket';
 
 // ── Severity colors ───────────────────────────────────────
 const SEV_COLOR = {
@@ -26,10 +27,46 @@ export default function Threats() {
   const [nvdData, setNvdData] = useState([]);
   const [nvdLoad, setNvdLoad] = useState(false);
   const barRef = useRef(null);
+  const { on, off } = useSocket();
 
   useEffect(() => {
     fetchAll();
   }, []);
+
+  // Listen for reset events to refresh data
+  useEffect(() => {
+    on('reset:done', () => {
+      fetchAll();
+    });
+    return () => off('reset:done');
+  }, [on, off]);
+
+  // Listen for node updates to refresh node status
+  useEffect(() => {
+    on('node:updated', ({ node }) => {
+      setNodes(prev => prev.map(n => n._id === node._id ? node : n));
+    });
+    return () => off('node:updated');
+  }, [on, off]);
+
+  // Listen for attack events to refresh logs in real-time
+  useEffect(() => {
+    const refreshLogs = () => {
+      api.get('/api/attack/logs?limit=100').then(res => {
+        setLogs(res.data.data);
+      }).catch(err => console.error(err));
+    };
+
+    on('attack:wave', refreshLogs);
+    on('attack:spread', refreshLogs);
+    on('attack:complete', refreshLogs);
+
+    return () => {
+      off('attack:wave', refreshLogs);
+      off('attack:spread', refreshLogs);
+      off('attack:complete', refreshLogs);
+    };
+  }, [on, off]);
 
   async function fetchAll() {
     try {
@@ -285,27 +322,30 @@ export default function Threats() {
           {/* Attack type breakdown */}
           <div style={{ background:'#060f1e', border:'1px solid #0d2444', padding:16 }}>
             <div style={titleStyle}>ATTACK TYPES</div>
-            {[
-              { name:'Compromised', count: logs.filter(l=>l.eventType==='node_compromised').length || 12, color:'#ff2244' },
-              { name:'Blocked',     count: logs.filter(l=>l.eventType==='node_blocked').length     || 8,  color:'#52b788' },
-              { name:'Resets',      count: logs.filter(l=>l.eventType==='reset').length            || 3,  color:'#00d4ff' },
-            ].map(t => {
-              const total = 23;
-              const pct   = Math.round((t.count / total) * 100) || 33;
-              return (
-                <div key={t.name} style={{ marginBottom:8 }}>
-                  <div style={{ display:'flex', justifyContent:'space-between',
-                    fontSize:10, marginBottom:3 }}>
-                    <span>{t.name}</span>
-                    <span style={{ color:t.color }}>{pct}%</span>
+            {(() => {
+              const attackTypes = [
+                { name:'Compromised', count: logs.filter(l=>l.eventType==='node_compromised').length, color:'#ff2244' },
+                { name:'Blocked',     count: logs.filter(l=>l.eventType==='node_blocked').length,     color:'#52b788' },
+                { name:'Resets',      count: logs.filter(l=>l.eventType==='reset').length,            color:'#00d4ff' },
+              ];
+              const total = attackTypes.reduce((sum, t) => sum + t.count, 0);
+              return attackTypes.map(t => {
+                const pct = total > 0 ? Math.round((t.count / total) * 100) : 0;
+                return (
+                  <div key={t.name} style={{ marginBottom:8 }}>
+                    <div style={{ display:'flex', justifyContent:'space-between',
+                      fontSize:10, marginBottom:3 }}>
+                      <span>{t.name}</span>
+                      <span style={{ color:t.color }}>{pct}%</span>
+                    </div>
+                    <div style={{ height:4, background:'#0d2444', borderRadius:2, overflow:'hidden' }}>
+                      <div style={{ height:'100%', width:`${Math.min(pct, 100)}%`,
+                        background:t.color, borderRadius:2 }} />
+                    </div>
                   </div>
-                  <div style={{ height:4, background:'#0d2444', borderRadius:2 }}>
-                    <div style={{ height:'100%', width:`${pct}%`,
-                      background:t.color, borderRadius:2 }} />
-                  </div>
-                </div>
-              );
-            })}
+                );
+              });
+            })()}
           </div>
         </div>
       </div>

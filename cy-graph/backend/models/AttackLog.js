@@ -5,7 +5,9 @@ const AttackLogSchema = new mongoose.Schema(
     attackerId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Node',
-      required: true,
+      required: function() {
+        return this.eventType !== 'reset';
+      },
     },
     victimId: {
       type: mongoose.Schema.Types.ObjectId,

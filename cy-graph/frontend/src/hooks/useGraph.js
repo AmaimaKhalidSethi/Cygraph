@@ -26,5 +26,5 @@ export function useGraph() {
     fetchGraph();
   }, []);
 
-  return { nodes, setNodes, edges, loading, error };
+  return { nodes, setNodes, edges, setEdges, loading, error };
 }

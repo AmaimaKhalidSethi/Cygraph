@@ -227,7 +227,9 @@ function DeviceForm({ initial = EMPTY_FORM, nodes, onSubmit, onCancel,
 }
 
 // ── Confirm Delete Dialog ─────────────────────────────
-function ConfirmDialog({ node, onConfirm, onCancel, hasEdges }) {
+function ConfirmDialog({ node, onConfirm, onCancel, hasEdges, isEdge }) {
+  const isEdgeDelete = isEdge || false;
+
   return (
     <div style={{
       position:'fixed', inset:0,
@@ -244,8 +246,14 @@ function ConfirmDialog({ node, onConfirm, onCancel, hasEdges }) {
         </div>
         <div style={{ fontSize:11, fontFamily:'Share Tech Mono',
           color:'#8ab4d4', marginBottom:16, lineHeight:1.6 }}>
-          Delete <span style={{ color:'#c8e4f8' }}>{node.name}</span> ({node.ip})?
-          {hasEdges > 0 && (
+          {isEdgeDelete ? (
+            <>Delete connection between <span style={{ color:'#c8e4f8' }}>
+              {node.source?.name || 'Unknown'} ↔ {node.target?.name || 'Unknown'}
+            </span>?</>
+          ) : (
+            <>Delete <span style={{ color:'#c8e4f8' }}>{node.name}</span> ({node.ip})?</>
+          )}
+          {hasEdges > 0 && !isEdgeDelete && (
             <div style={{ marginTop:8, color:'#f4a261' }}>
               ⚠ This node has <strong>{hasEdges}</strong> connection(s).
               All edges will also be removed.
@@ -326,12 +334,14 @@ export default function DeviceManager({ isOpen, onClose, onNodesChanged }) {
   const [filterType,   setFilterType  ] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
   const [selected,     setSelected    ] = useState(new Set());
-  const [mode,         setMode        ] = useState('list'); // list | add | edit
+  const [mode,         setMode        ] = useState('list'); // list | add | edit | edges
   const [editingNode,  setEditingNode  ] = useState(null);
   const [deleteTarget, setDeleteTarget ] = useState(null);
   const [bulkDeleting, setBulkDeleting ] = useState(false);
   const [toast,        setToast        ] = useState(null);
   const [sortBy,       setSortBy       ] = useState('name'); // name | type | status
+  const [edgeForm,     setEdgeForm     ] = useState({ source: '', target: '', encrypted: true });
+  const [deleteEdgeTarget, setDeleteEdgeTarget] = useState(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -472,6 +482,53 @@ export default function DeviceManager({ isOpen, onClose, onNodesChanged }) {
     else showToast(`${deleted} deleted, ${failed} failed`, 'warn');
   }
 
+  // ── Create edge ────────────────────────────────────
+  async function handleCreateEdge() {
+    if (!edgeForm.source || !edgeForm.target || edgeForm.source === edgeForm.target) {
+      showToast('Please select two different nodes', 'error');
+      return;
+    }
+
+    // Check if edge already exists
+    const existingEdge = edges.find(e => {
+      const src = typeof e.source === 'object' ? e.source._id : e.source;
+      const tgt = typeof e.target === 'object' ? e.target._id : e.target;
+      return (src === edgeForm.source && tgt === edgeForm.target) ||
+             (src === edgeForm.target && tgt === edgeForm.source);
+    });
+
+    if (existingEdge) {
+      showToast('Connection already exists between these nodes', 'warn');
+      return;
+    }
+
+    try {
+      const res = await api.post('/api/edges', edgeForm);
+      const newEdge = res.data.data;
+      setEdges(prev => [...prev, newEdge]);
+      setEdgeForm({ source: '', target: '', encrypted: true });
+      showToast('Connection created successfully');
+      onNodesChanged?.();
+    } catch (err) {
+      showToast('Failed to create connection: ' + (err.response?.data?.error || err.message), 'error');
+    }
+  }
+
+  // ── Delete edge ────────────────────────────────────
+  async function handleDeleteEdge() {
+    const edge = deleteEdgeTarget;
+    try {
+      await api.delete(`/api/edges/${edge._id}`);
+      setEdges(prev => prev.filter(e => e._id !== edge._id));
+      setDeleteEdgeTarget(null);
+      showToast('Connection deleted successfully');
+      onNodesChanged?.();
+    } catch (err) {
+      showToast('Failed to delete connection: ' + (err.response?.data?.error || err.message), 'error');
+      setDeleteEdgeTarget(null);
+    }
+  }
+
   if (!isOpen) return null;
 
   return (
@@ -522,10 +579,16 @@ export default function DeviceManager({ isOpen, onClose, onNodesChanged }) {
 
           <div style={{ display:'flex', gap:6, alignItems:'center' }}>
             {mode === 'list' && (
-              <button
-                onClick={() => { setMode('add'); setSelected(new Set()); }}
-                style={actionBtn('#00d4ff')}
-              >+ ADD</button>
+              <>
+                <button
+                  onClick={() => { setMode('add'); setSelected(new Set()); }}
+                  style={actionBtn('#00d4ff')}
+                >+ ADD</button>
+                <button
+                  onClick={() => { setMode('edges'); setSelected(new Set()); }}
+                  style={actionBtn('#52b788')}
+                >🔗 EDGES</button>
+              </>
             )}
             {mode !== 'list' && (
               <button
@@ -816,6 +879,168 @@ export default function DeviceManager({ isOpen, onClose, onNodesChanged }) {
           </>
         )}
 
+        {/* ── Edges Mode ───────────────────────────────── */}
+        {mode === 'edges' && (
+          <>
+            {/* Header */}
+            <div style={{
+              padding:'14px 16px',
+              borderBottom:'1px solid #0d2444',
+              display:'flex', alignItems:'center',
+              justifyContent:'space-between',
+              flexShrink:0,
+            }}>
+              <div>
+                <div style={{
+                  fontFamily:'Orbitron', fontSize:14,
+                  color:'#00d4ff', letterSpacing:3,
+                }}>
+                  EDGE MANAGER
+                </div>
+                <div style={{ fontSize:9, color:'#4a5568',
+                  fontFamily:'Share Tech Mono', marginTop:2 }}>
+                  {edges.length} connections · {nodes.length} devices
+                </div>
+              </div>
+            </div>
+
+            {/* Create Edge Form */}
+            <div style={{
+              padding:'16px', borderBottom:'1px solid #0d2444',
+              flexShrink:0,
+            }}>
+              <div style={{
+                fontSize:10, letterSpacing:3, color:'#00d4ff',
+                fontFamily:'Rajdhani', fontWeight:700,
+                marginBottom:12, textTransform:'uppercase'
+              }}>
+                Create New Connection
+              </div>
+              <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+                <select
+                  value={edgeForm.source}
+                  onChange={e => setEdgeForm(prev => ({ ...prev, source: e.target.value }))}
+                  style={{ ...inputStyle, flex:1 }}
+                >
+                  <option value="">Select Source Node</option>
+                  {nodes.map(n => (
+                    <option key={n._id} value={n._id}>{n.name}</option>
+                  ))}
+                </select>
+                <span style={{ color:'#52b788', fontSize:12 }}>→</span>
+                <select
+                  value={edgeForm.target}
+                  onChange={e => setEdgeForm(prev => ({ ...prev, target: e.target.value }))}
+                  style={{ ...inputStyle, flex:1 }}
+                >
+                  <option value="">Select Target Node</option>
+                  {nodes.map(n => (
+                    <option key={n._id} value={n._id}>{n.name}</option>
+                  ))}
+                </select>
+                <label style={{ display:'flex', alignItems:'center', gap:4, fontSize:9 }}>
+                  <input
+                    type="checkbox"
+                    checked={edgeForm.encrypted}
+                    onChange={e => setEdgeForm(prev => ({ ...prev, encrypted: e.target.checked }))}
+                  />
+                  Encrypted
+                </label>
+                <button
+                  onClick={handleCreateEdge}
+                  disabled={!edgeForm.source || !edgeForm.target || edgeForm.source === edgeForm.target}
+                  style={{
+                    ...actionBtn('#52b788'),
+                    opacity: (!edgeForm.source || !edgeForm.target || edgeForm.source === edgeForm.target) ? 0.5 : 1,
+                  }}
+                >+ CONNECT</button>
+              </div>
+            </div>
+
+            {/* Edges List */}
+            <div style={{ flex:1, overflowY:'auto' }}>
+              {edges.length === 0 ? (
+                <div style={{
+                  padding:'40px', textAlign:'center',
+                  color:'#4a5568', fontFamily:'Share Tech Mono', fontSize:12
+                }}>
+                  No connections found. Create your first edge above.
+                </div>
+              ) : (
+                <div style={{ padding:'8px 16px' }}>
+                  {edges.map(edge => {
+                    const sourceNode = nodes.find(n => n._id === (typeof edge.source === 'object' ? edge.source._id : edge.source));
+                    const targetNode = nodes.find(n => n._id === (typeof edge.target === 'object' ? edge.target._id : edge.target));
+
+                    return (
+                      <div key={edge._id} style={{
+                        display:'flex', alignItems:'center',
+                        padding:'12px', marginBottom:8,
+                        background:'#030810', border:'1px solid #0d2444',
+                        borderRadius:4,
+                      }}>
+                        {/* Connection info */}
+                        <div style={{ flex:1 }}>
+                          <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:4 }}>
+                            <span style={{
+                              fontFamily:'Share Tech Mono', fontSize:12,
+                              color:'#c8e4f8'
+                            }}>
+                              {sourceNode?.name || 'Unknown'}
+                            </span>
+                            <div style={{
+                              width:20, height:2,
+                              background: edge.encrypted ? '#52b788' : '#0d2444',
+                              borderRadius:1,
+                              opacity: edge.encrypted ? 0.9 : 0.6,
+                              borderStyle: edge.encrypted ? 'solid' : 'dashed',
+                              borderWidth: edge.encrypted ? '0' : '1px 0',
+                              borderColor: '#0d2444',
+                            }}></div>
+                            <span style={{
+                              fontFamily:'Share Tech Mono', fontSize:12,
+                              color:'#c8e4f8'
+                            }}>
+                              {targetNode?.name || 'Unknown'}
+                            </span>
+                            {edge.encrypted && (
+                              <span style={{
+                                fontSize:8, padding:'2px 6px',
+                                background:'#52b78822', color:'#52b788',
+                                border:'1px solid #52b78844', borderRadius:2
+                              }}>ENCRYPTED</span>
+                            )}
+                          </div>
+                          <div style={{
+                            fontSize:9, color:'#4a5568',
+                            fontFamily:'Share Tech Mono'
+                          }}>
+                            {sourceNode?.ip} ↔ {targetNode?.ip}
+                          </div>
+                        </div>
+
+                        {/* Delete button */}
+                        <button
+                          onClick={() => setDeleteEdgeTarget(edge)}
+                          style={{
+                            width:28, height:28,
+                            background:'transparent',
+                            border:'1px solid #0d2444',
+                            color:'#ff2244', cursor:'pointer',
+                            fontSize:14, display:'flex',
+                            alignItems:'center', justifyContent:'center',
+                          }}
+                          title="Delete connection"
+                        >🗑</button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </>
+        )}
+
         {/* Toast */}
         {toast && (
           <div style={{
@@ -848,6 +1073,15 @@ export default function DeviceManager({ isOpen, onClose, onNodesChanged }) {
           count={selected.size}
           onConfirm={handleBulkDelete}
           onCancel={() => setBulkDeleting(false)}
+        />
+      )}
+
+      {deleteEdgeTarget && (
+        <ConfirmDialog
+          node={deleteEdgeTarget}
+          isEdge={true}
+          onConfirm={handleDeleteEdge}
+          onCancel={() => setDeleteEdgeTarget(null)}
         />
       )}
     </>

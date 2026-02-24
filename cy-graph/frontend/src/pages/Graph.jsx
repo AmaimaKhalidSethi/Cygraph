@@ -112,6 +112,7 @@ function D3Graph({ nodes, edges, onNodeClick }) {
   .map(e => ({
     source: typeof e.source === 'object' ? e.source._id : e.source,
     target: typeof e.target === 'object' ? e.target._id : e.target,
+    encrypted: e.encrypted,
   })).filter(e =>
     d3Nodes.find(n => n.id === e.source) &&
     d3Nodes.find(n => n.id === e.target)
@@ -127,9 +128,10 @@ function D3Graph({ nodes, edges, onNodeClick }) {
     // Draw edges
     const link = mainG.append('g').selectAll('line')
       .data(d3Links).join('line')
-      .attr('stroke','#0d2444')
-      .attr('stroke-width', 1.5)
-      .attr('opacity', 0.8);
+      .attr('stroke', d => d.encrypted ? '#52b788' : '#0d2444')
+      .attr('stroke-width', d => d.encrypted ? 2.5 : 1.5)
+      .attr('opacity', d => d.encrypted ? 0.9 : 0.6)
+      .attr('stroke-dasharray', d => d.encrypted ? null : '3,3');
 
     // Draw nodes
     const nodeG = mainG.append('g').selectAll('g')
@@ -309,6 +311,36 @@ function D3Graph({ nodes, edges, onNodeClick }) {
         >↺</button>
       </div>
 
+      {/* Edge Legend */}
+      <div style={{
+        position:'absolute', top:16, right:16,
+        background:'#060f1e', border:'1px solid #0d2444',
+        padding:12, borderRadius:4, zIndex:20,
+        fontSize:9, fontFamily:'Share Tech Mono',
+      }}>
+        <div style={{ color:'#00d4ff', marginBottom:8, fontWeight:'bold' }}>
+          CONNECTION TYPES
+        </div>
+        <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+          <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+            <div style={{
+              width:20, height:2,
+              background:'#52b788', borderRadius:1,
+            }}></div>
+            <span style={{ color:'#52b788' }}>Encrypted</span>
+          </div>
+          <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+            <div style={{
+              width:20, height:2,
+              background:'#0d2444', borderRadius:1,
+              borderStyle:'dashed', borderWidth:'1px 0',
+              borderColor:'#0d2444',
+            }}></div>
+            <span style={{ color:'#4a5568' }}>Unencrypted</span>
+          </div>
+        </div>
+      </div>
+
       {/* Controls hint */}
       <div style={{
         position:'absolute', bottom:16, right:16,
@@ -327,7 +359,7 @@ function D3Graph({ nodes, edges, onNodeClick }) {
 // ══════════════════════════════════════════════════════
 export default function Graph() {
   const { isAdmin }                                = useAuth();
-  const { nodes, setNodes, edges, loading, error } = useGraph();
+  const { nodes, setNodes, edges, setEdges, loading, error } = useGraph();
   const { emit, on, off }                          = useSocket();
 
   const [selectedNode, setSelectedNode] = useState(null);
@@ -459,8 +491,12 @@ export default function Graph() {
   // ── Refresh nodes after DeviceManager changes ─────
   async function handleNodesChanged() {
     try {
-      const res = await api.get('/api/nodes');
-      setNodes(res.data.data);
+      const [nodesRes, edgesRes] = await Promise.all([
+        api.get('/api/nodes'),
+        api.get('/api/edges'),
+      ]);
+      setNodes(nodesRes.data.data.filter(n => n && n._id));
+      setEdges(edgesRes.data.data.filter(e => e && e.source && e.target));
       setSelectedNode(null);
     } catch (err) {
       console.error('Refresh failed:', err.message);
