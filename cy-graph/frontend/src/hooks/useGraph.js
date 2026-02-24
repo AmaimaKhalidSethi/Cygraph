@@ -14,8 +14,8 @@ export function useGraph() {
           api.get('/api/nodes'),
           api.get('/api/edges'),
         ]);
-        setNodes(nodesRes.data.data);
-        setEdges(edgesRes.data.data);
+        setNodes(nodesRes.data.data.filter(n => n && n._id));
+        setEdges(edgesRes.data.data.filter(e => e && e.source && e.target));
       } catch (err) {
         setError(err.message);
         console.error('Graph fetch error:', err);

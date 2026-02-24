@@ -4,6 +4,7 @@ import api           from '../api/axios';
 import { useGraph }  from '../hooks/useGraph';
 import { useSocket } from '../hooks/useSocket';
 import { useAuth }   from '../context/AuthContext';
+import DeviceManager from '../components/DeviceManager/DeviceManager';
 
 // ── Node colors ───────────────────────────────────────
 const NODE_COLORS = {
@@ -46,13 +47,13 @@ function getColor(node) {
 }
 
 // ══════════════════════════════════════════════════════
-// D3Graph Component — svgRef yahan hai
+// D3Graph Component — svgRef lives here
 // ══════════════════════════════════════════════════════
 function D3Graph({ nodes, edges, onNodeClick }) {
   const svgRef        = useRef(null);
   const simulationRef = useRef(null);
 
-  // Initial render
+  // ── Initial render ────────────────────────────────
   useEffect(() => {
     if (!nodes.length || !svgRef.current) return;
 
@@ -67,7 +68,7 @@ function D3Graph({ nodes, edges, onNodeClick }) {
       .attr('height', H)
       .style('cursor', 'grab');
 
-    // Grid
+    // Grid background
     const defs    = svg.append('defs');
     const pattern = defs.append('pattern')
       .attr('id','grid').attr('width',40).attr('height',40)
@@ -79,12 +80,12 @@ function D3Graph({ nodes, edges, onNodeClick }) {
       .attr('width','100%').attr('height','100%')
       .attr('fill','url(#grid)');
 
-    // Main group — zoom/pan yahan apply hoga
+    // Main group — zoom/pan applies here
     const mainG = svg.append('g').attr('class','main-group');
 
     // Zoom behavior
     const zoom = d3.zoom()
-      .scaleExtent([0.2, 3])
+      .scaleExtent([0.15, 4])
       .on('zoom', (event) => {
         mainG.attr('transform', event.transform);
       });
@@ -93,24 +94,28 @@ function D3Graph({ nodes, edges, onNodeClick }) {
 
     // Double click — reset zoom
     svg.on('dblclick.zoom', () => {
-      svg.transition().duration(600)
+      svg.transition().duration(500)
         .call(zoom.transform, d3.zoomIdentity);
     });
 
-    // D3 nodes
-    const d3Nodes = nodes.map(n => ({
-      ...n, id: n._id,
-      x: n.position?.x || W/2 + (Math.random()-0.5)*300,
-      y: n.position?.y || H/2 + (Math.random()-0.5)*300,
-    }));
+    // D3 node data
+    const d3Nodes = nodes
+  .filter(n => n && n._id)  // ← null nodes hatao
+  .map(n => ({
+    ...n, id: n._id,
+    x: n.position?.x || W/2 + (Math.random()-0.5)*300,
+    y: n.position?.y || H/2 + (Math.random()-0.5)*300,
+  }));
 
-    const d3Links = edges.map(e => ({
-      source: typeof e.source === 'object' ? e.source._id : e.source,
-      target: typeof e.target === 'object' ? e.target._id : e.target,
-    })).filter(e =>
-      d3Nodes.find(n => n.id === e.source) &&
-      d3Nodes.find(n => n.id === e.target)
-    );
+    const d3Links = edges
+  .filter(e => e && e.source && e.target)  // ← null edges hatao
+  .map(e => ({
+    source: typeof e.source === 'object' ? e.source._id : e.source,
+    target: typeof e.target === 'object' ? e.target._id : e.target,
+  })).filter(e =>
+    d3Nodes.find(n => n.id === e.source) &&
+    d3Nodes.find(n => n.id === e.target)
+  );
 
     // Force simulation
     simulationRef.current = d3.forceSimulation(d3Nodes)
@@ -119,14 +124,14 @@ function D3Graph({ nodes, edges, onNodeClick }) {
       .force('center',  d3.forceCenter(W/2, H/2))
       .force('collide', d3.forceCollide(34));
 
-    // Edges
+    // Draw edges
     const link = mainG.append('g').selectAll('line')
       .data(d3Links).join('line')
       .attr('stroke','#0d2444')
       .attr('stroke-width', 1.5)
       .attr('opacity', 0.8);
 
-    // Nodes
+    // Draw nodes
     const nodeG = mainG.append('g').selectAll('g')
       .data(d3Nodes).join('g')
       .attr('cursor','pointer')
@@ -140,8 +145,10 @@ function D3Graph({ nodes, edges, onNodeClick }) {
           if (!event.active) simulationRef.current.alphaTarget(0.3).restart();
           d.fx = d.x; d.fy = d.y;
         })
-        .on('drag',  (event, d) => { d.fx = event.x; d.fy = event.y; })
-        .on('end',   (event, d) => {
+        .on('drag', (event, d) => {
+          d.fx = event.x; d.fy = event.y;
+        })
+        .on('end', (event, d) => {
           if (!event.active) simulationRef.current.alphaTarget(0);
           api.put(`/api/nodes/${d.id}`, {
             position: { x: Math.round(d.x), y: Math.round(d.y) }
@@ -165,7 +172,7 @@ function D3Graph({ nodes, edges, onNodeClick }) {
       .attr('stroke',       d => getColor(d))
       .attr('stroke-width', 2);
 
-    // Letter
+    // Type letter
     nodeG.append('text')
       .attr('text-anchor','middle')
       .attr('dominant-baseline','middle')
@@ -176,7 +183,7 @@ function D3Graph({ nodes, edges, onNodeClick }) {
       .attr('pointer-events','none')
       .text(d => d.type[0].toUpperCase());
 
-    // Name label
+    // Device name label
     nodeG.append('text')
       .attr('text-anchor', 'middle')
       .attr('dy',           d => (NODE_RADIUS[d.type]||14)+14)
@@ -204,7 +211,7 @@ function D3Graph({ nodes, edges, onNodeClick }) {
       nodeG.attr('transform', d => `translate(${d.x},${d.y})`);
     });
 
-    // Store refs
+    // Store refs for external access
     svgRef.current._nodeG = nodeG;
     svgRef.current._zoom  = zoom;
     svgRef.current._svg   = svg;
@@ -212,19 +219,17 @@ function D3Graph({ nodes, edges, onNodeClick }) {
     return () => { simulationRef.current?.stop(); };
   }, [nodes.length, edges.length]);
 
-  // Update colors on status change
+  // ── Update colors when node status changes ────────
   useEffect(() => {
     const nodeG = svgRef.current?._nodeG;
     if (!nodeG) return;
 
-    // Update every node's color
     nodeG.each(function(d) {
-      const updated = nodes.find(n => n._id === d.id);
+      const updated = nodes.find(n => n && n._id && n._id === d.id);
       if (!updated) return;
 
-      // Sync status to d3 data
-      d.status     = updated.status;
-      d.hasFirewall= updated.hasFirewall;
+      d.status      = updated.status;
+      d.hasFirewall = updated.hasFirewall;
 
       const color = getColor(updated);
 
@@ -233,14 +238,7 @@ function D3Graph({ nodes, edges, onNodeClick }) {
         .attr('stroke', color)
         .attr('fill',   color + '22');
 
-      d3.select(this).selectAll('text')
-        .filter(function() {
-          return !d3.select(this).classed('ripple');
-        })
-        .transition().duration(600)
-        .attr('fill', color);
-
-      // Ripple on compromised
+      // Ripple pulse on compromised nodes
       if (updated.status === 'compromised') {
         const el = d3.select(this);
         if (el.attr('data-pulsing')) return;
@@ -265,18 +263,16 @@ function D3Graph({ nodes, edges, onNodeClick }) {
       }
     });
   }, [nodes]);
-  
 
-  // ── D3Graph return — zoom buttons YAHAN hain ─────────
+  // ── D3Graph JSX — zoom buttons INSIDE here ────────
   return (
     <div style={{ width:'100%', height:'100%', position:'relative' }}>
-      {/* SVG canvas */}
       <svg
         ref={svgRef}
         style={{ width:'100%', height:'100%', display:'block' }}
       />
 
-      {/* Zoom buttons — svgRef yahan accessible hai ✅ */}
+      {/* Zoom Controls — svgRef is accessible here ✅ */}
       <div style={{
         position:'absolute', bottom:70, right:16,
         display:'flex', flexDirection:'column', gap:4, zIndex:20,
@@ -320,9 +316,7 @@ function D3Graph({ nodes, edges, onNodeClick }) {
         color:'#1a3a5c', textAlign:'right', lineHeight:1.6,
         pointerEvents:'none', zIndex:20,
       }}>
-        Scroll → Zoom<br/>
-        Drag canvas → Pan<br/>
-        Double click → Reset
+        Scroll → Zoom · Drag canvas → Pan · Dbl-click → Reset
       </div>
     </div>
   );
@@ -335,21 +329,23 @@ export default function Graph() {
   const { isAdmin }                                = useAuth();
   const { nodes, setNodes, edges, loading, error } = useGraph();
   const { emit, on, off }                          = useSocket();
-  const [selectedNode, setSelectedNode]            = useState(null);
-  const [logs, setLogs]                            = useState([
+
+  const [selectedNode, setSelectedNode] = useState(null);
+  const [dmOpen,       setDmOpen      ] = useState(false);  // Device Manager panel
+  const [logs,         setLogs        ] = useState([
     { type:'safe', msg:'System initialised',      time: ts() },
     { type:'safe', msg:'Network topology loaded', time: ts() },
     { type:'safe', msg:'All systems nominal',     time: ts() },
   ]);
 
   function ts() { return new Date().toTimeString().slice(0,8); }
+
   function addLog(type, msg) {
     setLogs(prev => [...prev, { type, msg, time: ts() }]);
   }
 
-  // Socket listeners
+  // ── Socket listeners ──────────────────────────────
   useEffect(() => {
-    // ── Attack wave ─────────────────────────────────
     function onWave({ compromised, blocked }) {
       setNodes(prev => prev.map(n =>
         compromised.includes(n._id) ? { ...n, status:'compromised' } : n
@@ -358,31 +354,6 @@ export default function Graph() {
       if (blocked.length)     addLog('warn',   `${blocked.length} node(s) blocked by firewall`);
     }
 
-    // ── Attack complete ──────────────────────────────
-    function onComplete({ message }) {
-      addLog('warn', message);
-    }
-
-    // ── Reset done ───────────────────────────────────
-    function onReset({ nodes: fresh }) {
-      console.log('🔄 Reset received — fresh nodes:', fresh.length);
-      setNodes([...fresh]);           // force new array reference
-      setSelectedNode(null);
-      addLog('safe', 'Network reset — all systems nominal');
-    }
-
-    // ── Node added ───────────────────────────────────
-    function onNodeAdded({ node }) {
-      setNodes(prev => [...prev, node]);
-      addLog('safe', `Node added: ${node.name}`);
-    }
-
-    // ── Node updated ─────────────────────────────────
-    function onNodeUpdated({ node }) {
-      setNodes(prev => prev.map(n => n._id === node._id ? node : n));
-    }
-
-    // ── Attack spread (initial broadcast) ────────────
     function onSpread({ compromised }) {
       if (!compromised?.length) return;
       setNodes(prev => prev.map(n =>
@@ -390,34 +361,66 @@ export default function Graph() {
       ));
     }
 
+    function onComplete({ message }) {
+      addLog('warn', message);
+    }
+
+    function onReset({ nodes: fresh }) {
+      setNodes([...fresh]);
+      setSelectedNode(null);
+      addLog('safe', 'Network reset — all systems nominal');
+    }
+
+    function onNodeAdded({ node }) {
+      setNodes(prev => [...prev, node]);
+      addLog('safe', `Node added: ${node.name}`);
+    }
+
+    function onNodeUpdated({ node }) {
+      setNodes(prev => prev.map(n => n._id === node._id ? node : n));
+    }
+
+    function onAuthError({ message }) {
+      addLog('danger', `⛔ ${message}`);
+    }
+
     on('attack:wave',     onWave);
+    on('attack:spread',   onSpread);
     on('attack:complete', onComplete);
     on('reset:done',      onReset);
     on('node:added',      onNodeAdded);
     on('node:updated',    onNodeUpdated);
-    on('attack:spread',   onSpread);
+    on('auth:error',      onAuthError);
 
     return () => {
       off('attack:wave',     onWave);
+      off('attack:spread',   onSpread);
       off('attack:complete', onComplete);
       off('reset:done',      onReset);
       off('node:added',      onNodeAdded);
       off('node:updated',    onNodeUpdated);
-      off('attack:spread',   onSpread);
+      off('auth:error',      onAuthError);
     };
   }, [on, off]);
 
-  // Auto scroll log
+  // Auto-scroll attack log
   useEffect(() => {
     const el = document.getElementById('attack-log');
     if (el) el.scrollTop = el.scrollHeight;
   }, [logs]);
 
+  // ── Actions ───────────────────────────────────────
   function simulateAttack() {
-    if (!selectedNode) { addLog('warn','Select a node first!'); return; }
-    if (selectedNode.status === 'compromised') { addLog('warn','Already compromised'); return; }
+    if (!selectedNode) {
+      addLog('warn', 'Select a node first!');
+      return;
+    }
+    if (selectedNode.status === 'compromised') {
+      addLog('warn', 'Node already compromised');
+      return;
+    }
     emit('attack:start', { nodeId: selectedNode._id });
-    addLog('danger', `⚡ Attack on ${selectedNode.name}`);
+    addLog('danger', `⚡ Attack launched on ${selectedNode.name}`);
   }
 
   function resetNetwork() {
@@ -438,40 +441,61 @@ export default function Graph() {
     });
   }
 
-  // delete node
   async function deleteNode() {
-    if (!selectedNode) { addLog('warn', 'Select a node first!'); return; }
+    if (!selectedNode) {
+      addLog('warn', 'Select a node first!');
+      return;
+    }
     try {
       await api.delete(`/api/nodes/${selectedNode._id}`);
       setNodes(prev => prev.filter(n => n._id !== selectedNode._id));
-      setSelectedNode(null);
       addLog('safe', `Node ${selectedNode.name} deleted`);
+      setSelectedNode(null);
     } catch (err) {
       addLog('danger', 'Delete failed: ' + err.message);
     }
   }
 
+  // ── Refresh nodes after DeviceManager changes ─────
+  async function handleNodesChanged() {
+    try {
+      const res = await api.get('/api/nodes');
+      setNodes(res.data.data);
+      setSelectedNode(null);
+    } catch (err) {
+      console.error('Refresh failed:', err.message);
+    }
+  }
+
+  // ── Loading / Error states ────────────────────────
   if (loading) return (
-    <div style={{ display:'flex', alignItems:'center', justifyContent:'center',
-      height:'calc(100vh - 56px)', color:'#00d4ff', fontFamily:'Share Tech Mono' }}>
+    <div style={{
+      display:'flex', alignItems:'center', justifyContent:'center',
+      height:'calc(100vh - 56px)', color:'#00d4ff',
+      fontFamily:'Share Tech Mono', fontSize:13,
+    }}>
       Loading network topology...
     </div>
   );
 
   if (error) return (
-    <div style={{ display:'flex', alignItems:'center', justifyContent:'center',
-      height:'calc(100vh - 56px)', color:'#ff2244', fontFamily:'Share Tech Mono' }}>
+    <div style={{
+      display:'flex', alignItems:'center', justifyContent:'center',
+      height:'calc(100vh - 56px)', color:'#ff2244',
+      fontFamily:'Share Tech Mono', fontSize:13,
+    }}>
       ❌ {error} — Backend chal raha hai?
     </div>
   );
 
+  // ── Render ────────────────────────────────────────
   return (
     <div style={{ display:'flex', width:'100%', height:'calc(100vh - 56px)' }}>
 
       {/* ── Left: Graph Canvas ──────────────────────── */}
       <div style={{ flex:1, position:'relative', overflow:'hidden' }}>
 
-        {/* D3Graph — zoom buttons issi ke andar hain */}
+        {/* D3Graph — zoom/pan + zoom buttons inside */}
         <D3Graph
           nodes={nodes}
           edges={edges}
@@ -485,18 +509,25 @@ export default function Graph() {
           padding:12, fontSize:11, zIndex:10,
           pointerEvents:'none',
         }}>
-          <div style={{ color:'#00d4ff', fontFamily:'Rajdhani', fontWeight:700,
-            letterSpacing:2, marginBottom:8 }}>LEGEND</div>
+          <div style={{
+            color:'#00d4ff', fontFamily:'Rajdhani', fontWeight:700,
+            letterSpacing:2, marginBottom:8,
+          }}>LEGEND</div>
           {Object.entries(NODE_TYPES).map(([key, label]) => (
-            <div key={key} style={{ display:'flex', alignItems:'center',
-              gap:8, marginBottom:4 }}>
-              <div style={{ width:10, height:10, borderRadius:'50%',
-                background: NODE_COLORS[key] }} />
-              <span>{label}</span>
+            <div key={key} style={{
+              display:'flex', alignItems:'center', gap:8, marginBottom:4,
+            }}>
+              <div style={{
+                width:10, height:10, borderRadius:'50%',
+                background: NODE_COLORS[key],
+              }} />
+              <span style={{ color:'#8ab4d4', fontSize:10 }}>{label}</span>
             </div>
           ))}
-          <div style={{ borderTop:'1px solid #0d2444', marginTop:8,
-            paddingTop:6, color:'#1a3a5c', fontSize:9 }}>
+          <div style={{
+            borderTop:'1px solid #0d2444', marginTop:8,
+            paddingTop:6, color:'#1a3a5c', fontSize:9,
+          }}>
             Click node → Select
           </div>
         </div>
@@ -505,14 +536,17 @@ export default function Graph() {
         <div style={{
           position:'absolute', bottom:16,
           left:'50%', transform:'translateX(-50%)',
-          display:'flex', gap:8, zIndex:10,
+          display:'flex', gap:8, zIndex:10, flexWrap:'wrap',
+          justifyContent:'center',
         }}>
           <button onClick={resetNetwork} style={btn('#00d4ff')}>
-            RESET
+            ↺ RESET
           </button>
-          <button onClick={addNode} style={btn('#00d4ff')}>
-            + ADD NODE
+
+          <button onClick={() => setDmOpen(true)} style={btn('#aa44ff')}>
+            ⚙ DEVICES
           </button>
+
           <button
             onClick={simulateAttack}
             disabled={!isAdmin}
@@ -528,41 +562,48 @@ export default function Graph() {
         </div>
       </div>
 
-      {/* ── Right: Info Panel ───────────────────────── */}
+      {/* ── Right: Info + Log Panel ─────────────────── */}
       <div style={{
         width:280, borderLeft:'1px solid #0d2444',
         background:'#060f1e', display:'flex',
         flexDirection:'column', overflow:'hidden', flexShrink:0,
       }}>
+
         {/* Node details */}
-        {/* Node details */}
-        <div style={{ padding:14, borderBottom:'1px solid #0d2444' }}>
+        <div style={{ padding:14, borderBottom:'1px solid #0d2444', flexShrink:0 }}>
           <div style={titleSt}>NODE DETAILS</div>
+
           {selectedNode ? (
             <>
-              <div style={{ fontFamily:'Orbitron', fontSize:13,
-                color:'#c8e4f8', marginBottom:8 }}>
+              <div style={{
+                fontFamily:'Orbitron', fontSize:12,
+                color:'#c8e4f8', marginBottom:10,
+                wordBreak:'break-all',
+              }}>
                 {selectedNode.name}
               </div>
+
               {[
-                ['TYPE',        NODE_TYPES[selectedNode.type]],
+                ['TYPE',        NODE_TYPES[selectedNode.type] || selectedNode.type],
                 ['IP',          selectedNode.ip],
                 ['OS',          selectedNode.os],
                 ['FIREWALL',    selectedNode.hasFirewall ? 'ENABLED' : 'DISABLED'],
-                ['CONNECTIONS', edges.filter(e =>
-                  (typeof e.source==='object'?e.source._id:e.source)===selectedNode._id ||
-                  (typeof e.target==='object'?e.target._id:e.target)===selectedNode._id
-                ).length],
+                ['CONNECTIONS', edges.filter(e => {
+                  const src = typeof e.source==='object' ? e.source._id : e.source;
+                  const tgt = typeof e.target==='object' ? e.target._id : e.target;
+                  return src === selectedNode._id || tgt === selectedNode._id;
+                }).length],
                 ['STATUS',      selectedNode.status.toUpperCase()],
               ].map(([label, val]) => (
                 <div key={label} style={{
                   display:'flex', justifyContent:'space-between',
                   fontSize:10, padding:'3px 0',
                   borderBottom:'1px solid #0d244466',
+                  gap:6,
                 }}>
-                  <span style={{ color:'#4a5568' }}>{label}</span>
+                  <span style={{ color:'#4a5568', flexShrink:0 }}>{label}</span>
                   <span style={{
-                    fontWeight:'bold',
+                    fontWeight:'bold', textAlign:'right',
                     color: label==='STATUS'
                       ? selectedNode.status==='secure'      ? '#52b788'
                       : selectedNode.status==='compromised' ? '#ff2244' : '#f4a261'
@@ -573,23 +614,16 @@ export default function Graph() {
                 </div>
               ))}
 
-              {/* Delete button — only admin */}
+              {/* Delete button — admin only */}
               {isAdmin && (
                 <button
                   onClick={deleteNode}
                   style={{
-                    marginTop: 10,
-                    width: '100%',
-                    padding: '5px',
-                    fontFamily: 'Rajdhani',
-                    fontWeight: 700,
-                    fontSize: 10,
-                    letterSpacing: 2,
-                    border: '1px solid #ff2244',
-                    background: '#ff224411',
-                    color: '#ff2244',
-                    cursor: 'pointer',
-                    textTransform: 'uppercase',
+                    marginTop:10, width:'100%', padding:'5px',
+                    fontFamily:'Rajdhani', fontWeight:700,
+                    fontSize:10, letterSpacing:2,
+                    border:'1px solid #ff2244', background:'#ff224411',
+                    color:'#ff2244', cursor:'pointer', textTransform:'uppercase',
                   }}
                 >
                   🗑 DELETE NODE
@@ -597,22 +631,26 @@ export default function Graph() {
               )}
             </>
           ) : (
-            <div style={{ fontSize:11, color:'#4a5568' }}>
+            <div style={{ fontSize:11, color:'#4a5568', fontFamily:'Share Tech Mono' }}>
               Click a node to inspect
             </div>
           )}
         </div>
 
-        {/* Log title */}
-        <div style={{ padding:'12px 14px 6px',
-          borderBottom:'1px solid #0d2444' }}>
+        {/* Log header */}
+        <div style={{
+          padding:'10px 14px 6px',
+          borderBottom:'1px solid #0d2444',
+          flexShrink:0,
+        }}>
           <div style={titleSt}>ATTACK LOG</div>
         </div>
 
         {/* Log entries */}
-        <div id="attack-log" style={{
-          flex:1, overflowY:'auto', padding:14,
-        }}>
+        <div
+          id="attack-log"
+          style={{ flex:1, overflowY:'auto', padding:14 }}
+        >
           {logs.map((log, i) => (
             <div key={i} style={{
               fontSize:10, padding:'3px 0',
@@ -624,27 +662,49 @@ export default function Graph() {
               </span>
               <span style={{
                 color: log.type==='safe'   ? '#52b788'
-                     : log.type==='danger' ? '#ff2244' : '#f4a261',
-              }}>{log.msg}</span>
+                     : log.type==='danger' ? '#ff2244'
+                     :                       '#f4a261',
+              }}>
+                {log.msg}
+              </span>
             </div>
           ))}
         </div>
       </div>
+
+      {/* ── Device Manager Panel ─────────────────────── */}
+      <DeviceManager
+        isOpen={dmOpen}
+        onClose={() => setDmOpen(false)}
+        onNodesChanged={handleNodesChanged}
+      />
     </div>
   );
 }
 
-// ── Helpers ───────────────────────────────────────────
+// ── Style helpers ─────────────────────────────────────
 function btn(color) {
   return {
-    fontFamily:'Rajdhani', fontWeight:700, letterSpacing:2, fontSize:11,
-    padding:'6px 18px', border:`1px solid ${color}`,
-    background: color+'22', color, cursor:'pointer', textTransform:'uppercase',
+    fontFamily:    'Rajdhani',
+    fontWeight:    700,
+    letterSpacing: 2,
+    fontSize:      11,
+    padding:       '6px 18px',
+    border:        `1px solid ${color}`,
+    background:    color + '22',
+    color,
+    cursor:        'pointer',
+    textTransform: 'uppercase',
+    whiteSpace:    'nowrap',
   };
 }
 
 const titleSt = {
-  fontFamily:'Rajdhani', fontWeight:700, fontSize:10,
-  letterSpacing:3, textTransform:'uppercase',
-  color:'#00d4ff', marginBottom:10,
+  fontFamily:    'Rajdhani',
+  fontWeight:    700,
+  fontSize:      10,
+  letterSpacing: 3,
+  textTransform: 'uppercase',
+  color:         '#00d4ff',
+  marginBottom:  10,
 };

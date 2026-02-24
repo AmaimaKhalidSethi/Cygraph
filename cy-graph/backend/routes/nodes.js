@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const Node = require('../models/Node');
+const Edge = require('../models/Edge');
 
 // GET all nodes
 router.get('/', async (req, res) => {
@@ -73,6 +74,27 @@ router.put('/action/reset', async (req, res) => {
     );
     const nodes = await Node.find();
     res.json({ success: true, message: 'Network reset', data: nodes });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// DELETE node + its edges
+router.delete('/:id', async (req, res) => {
+  try {
+    const node = await Node.findByIdAndDelete(req.params.id);
+    if (!node) return res.status(404).json({ success: false, error: 'Node not found' });
+
+    // Delete all edges connected to this node
+    const edgeResult = await Edge.deleteMany({
+      $or: [{ source: req.params.id }, { target: req.params.id }]
+    });
+
+    res.json({
+      success: true,
+      message: `${node.name} deleted`,
+      edgesRemoved: edgeResult.deletedCount,
+    });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
