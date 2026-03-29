@@ -6,6 +6,11 @@ in real-time across multiple devices.
 
 ---
 
+![alt text](image.png)
+
+*ADMIN*
+![alt text](image-1.png)
+
 ## Tech Stack
 
 - **MongoDB Atlas** — Network map, attack logs, firewall rules
