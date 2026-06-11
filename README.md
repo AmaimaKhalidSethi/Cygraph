@@ -31,10 +31,10 @@ cd cy-graph
 ### 2. Backend setup
 cd backend
 npm install
-# Create .env file:
-# PORT=5000
-# MONGO_URI=your_mongodb_atlas_uri
-# JWT_SECRET=your_secret_key
+Create .env file:
+PORT=5000
+MONGO_URI=your_mongodb_atlas_uri
+JWT_SECRET=your_secret_key
 npm run seed    # Seed database with 15 nodes, 20 edges, 2 users
 npm run dev     # Start backend on port 5000
 
