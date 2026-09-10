@@ -1,0 +1,122 @@
+@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@400;600;700&family=Orbitron:wght@700;900&display=swap');
+
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  background-color: #030810;
+  color: #8ab4d4;
+  font-family: 'Share Tech Mono', monospace;
+  height: 100vh;
+  overflow: hidden;
+}
+
+::-webkit-scrollbar       { width: 4px; }
+::-webkit-scrollbar-track { background: #030810; }
+::-webkit-scrollbar-thumb { background: #1a3a5c; }
+
+@keyframes pulse-ring {
+  0%   { transform: scale(1);   opacity: 0.8; }
+  100% { transform: scale(3.5); opacity: 0;   }
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0; }
+}
+
+/* ── Mobile responsive ────────────────────────── */
+@media (max-width: 768px) {
+  body { overflow-y: auto; }
+
+  .graph-layout {
+    flex-direction: column !important;
+  }
+
+  .graph-panel {
+    width: 100% !important;
+    height: 280px;
+    border-left: none !important;
+    border-top: 1px solid #0d2444;
+  }
+
+  .graph-canvas {
+    height: 55vh !important;
+  }
+
+  .metric-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+
+  .threat-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .firewall-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  nav { display: none !important; }
+
+  .mobile-menu {
+    display: flex !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .metric-grid {
+    grid-template-columns: 1fr 1fr !important;
+  }
+
+  header {
+    padding: 0 12px !important;
+  }
+}
+
+/* ── Page transitions ─────────────────────────── */
+.page-enter {
+  animation: fadeIn 0.25s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0);   }
+}
+
+/* ── Responsive Header ────────────────────────── */
+@media (max-width: 768px) {
+  .desktop-nav {
+    display: none !important;
+  }
+
+  .hamburger {
+    display: block !important;
+  }
+
+  .user-badge {
+    display: none !important;
+  }
+
+  .logout-btn {
+    display: none !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .desktop-nav {
+    display: none !important;
+  }
+
+  .hamburger {
+    display: block !important;
+  }
+}
